@@ -14,6 +14,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.Scanner;
 
 public class Server {
@@ -27,6 +28,12 @@ public class Server {
 	public static Connection cndb;
 	
 	public Server(int port) {
+		
+		try {
+			cndb = ConnectDatabase.getMySQLConnection();
+		} catch (Exception e) {
+			System.out.println("Error From My SQL");
+		}
 		this.port = port;
 		
 	}
@@ -56,21 +63,11 @@ public class Server {
 	}
 	
 	public static boolean checkUser(String name, String password) throws SQLException {
-		try {
-			cndb = ConnectDatabase.getMySQLConnection();
-			System.out.println("perfect");
-		} catch (Exception e) {
-			System.out.println("Error From My SQL");
-		}
-		
 		Statement statement = cndb.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
 		String query = "Select * from user";
 		ResultSet rs = statement.executeQuery(query);
-		System.out.println("123");
 
 		while(rs.next()) {
-			System.out.println(rs.getString("username"));
-			System.out.println(rs.getString("password"));
 			if(rs.getString("username").equalsIgnoreCase(name)) {
 				if(rs.getString("password").equalsIgnoreCase(password))
 					return true;
@@ -81,13 +78,26 @@ public class Server {
 		return false;
 	}
 	
+	public static String getMap() throws SQLException {
+		Statement statement = cndb.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
+		Random rd = new Random();
+		int map = rd.nextInt(2) + 1;
+		String query = "Select * from map where map_id = '" + map + "'";
+		ResultSet rs = statement.executeQuery(query);
+		
+		rs.next();
+		
+		System.out.println(rs.getString("map_link").trim());
+		
+		return rs.getString("map_link").trim();
+		
+	}
 	
 }
 
 
 class ReadServer extends Thread {
 	int userId;
-	int isDuo;
 	Socket serveraccept;
 	boolean isSendedMap = false;
 
@@ -96,36 +106,45 @@ class ReadServer extends Thread {
 		this.userId = userId;
 	}
 	
-	@SuppressWarnings("resource")
 	@Override
 	public void run() {
 		DataInputStream dis = null;
 		DataOutputStream dos = null;
-		FileInputStream fis = null;
-		byte[]b = new byte[2002];
 		OutputStream os = null;
 		while(true) {
 			try {
 				dos = new DataOutputStream(serveraccept.getOutputStream());
 				dis = new DataInputStream(serveraccept.getInputStream());
+				os = serveraccept.getOutputStream();
 				String request = dis.readUTF();
 				if(request.equalsIgnoreCase("check login")) {
 					String name = dis.readUTF();
 					String password = dis.readUTF();
-					System.out.println("123");
 					if(Server.checkUser(name, password))
 						dos.writeUTF("OK");
 					else
 						dos.writeUTF("NO");
 				}
-				if(request.equalsIgnoreCase("get file")) {
+				if(request.equalsIgnoreCase("get map")) {
 					//Truyền map từ server
-					fis =  new FileInputStream("D:\\JAvaws\\ServerBomberman\\res\\levels\\Level1.txt");
+					FileInputStream fis =  new FileInputStream(Server.getMap());
+					byte[]b = new byte[2002];
 					fis.read(b, 0, b.length);
-					os = serveraccept.getOutputStream();
 					os.write(b, 0, b.length);
+					fis.close();
 				}
 			} catch (Exception e) {
+				try {
+					serveraccept.close();
+					dis.close();
+					dos.close();
+					os.close();
+					System.out.println(serveraccept.getPort() + " disconnected !!");
+					break;
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
